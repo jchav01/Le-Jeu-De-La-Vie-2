@@ -4,10 +4,26 @@ Created on Sat Oct 14 13:10:55 2023
 
 @author: jules
 """
+
+"""
+-Auto spawn on preys
+-Auto spawn on predators
+-Regulated through chase and limit-time life without eating for wolves
+
+- Stability of the 2 pops, stabilizing at two distincts values OR
+- Extinction of all pops, preys first and then preds
+
+-Idea : can introduce spawn at 0 when a pop is extinded to repopulate the system... 
+but objective: find a way not to reach 0 ? anyway.
+
+-Or we can introduce a need to chase, that goes to 0 when has eaten: leaves some room for the 
+other specie to populate
+
+"""
+
 import pygame
 import numpy as np
 import random
-import math
 import matplotlib.pyplot as plt
 
 # Create empty lists to store population data
@@ -18,20 +34,21 @@ prey_population = []
 
 # Paramètres
 grid_size = 130
-initial_prey_number = 20
-initial_wolves_number = 3
-prey_spawn_ratio = 0.1
-limit_eating = 32 # Time after which a wolf dies with no eating
+initial_prey_number = 30
+initial_wolves_number = 4
+prey_spawn_ratio = 0.05
+pred_spawn_ratio = 0.025
+limit_eating = 25 # Time after which a wolf dies with no eating
 time = 0 
 speed = 2  # velocity of the wolves
 SPAWN = 0
+SPAWN_1 = 0
 
 ############# CLASSES #########################################################
 class wolf:
-    def __init__(self, position, days_without_eating = 0, days_without_reproduce = 0):
+    def __init__(self, position, days_without_eating = 0):
         self.position = position
         self.days_without_eating = days_without_eating
-        self.days_without_reproduce = days_without_reproduce
 
     def move(self, new_position):
         self.position = new_position
@@ -40,8 +57,7 @@ class wolf:
     def eat(self):
         self.days_without_eating = 0
         
-    def reproduction(self):
-        self.days_without_reproduce = 0
+
 
 class prey:
     def __init__(self, position):
@@ -109,7 +125,7 @@ def is_in_grid(position):
 
     
 ########### WOlVES ROUTINE ####################################################
-
+"""
 def reproduction(wolf_instance, mate, Wolves_list, grid):
 
     x1, y1 = wolf_instance.position
@@ -125,18 +141,7 @@ def reproduction(wolf_instance, mate, Wolves_list, grid):
                 mate.reproduction()
                 Wolves_list.append(new_wolf)
                 break
-
     
-
-def find_nearest_prey(wolf_instance, prey_list):
-    nearest_prey = None
-    min_distance = float('inf')
-    for prey_instance in prey_list:
-        dist = distance(wolf_instance, prey_instance)
-        if dist < min_distance:
-            min_distance = dist
-            nearest_prey = prey_instance
-    return nearest_prey
 
 def find_nearest_sex_mate(pred, Pred_list):
     nearest_mate = None
@@ -168,14 +173,28 @@ def go_to_mate(pred, mate, grid):
     
     # Check if the new position is within the grid
     if is_in_grid(new_position) and not position_taken(new_position,grid):
-        pred.move(new_position)    
+        pred.move(new_position)
+
+"""
+
+def find_nearest_prey(wolf_instance, prey_list):
+    nearest_prey = None
+    min_distance = float('inf')
+    for prey_instance in prey_list:
+        dist = distance(wolf_instance, prey_instance)
+        if dist < min_distance:
+            min_distance = dist
+            nearest_prey = prey_instance
+    return nearest_prey
+
+    
     
 
 def Next_movement(pred, Prey_list, Pred_list, grid):
     
-    if pred.days_without_eating > 12 : 
+    if pred.days_without_eating > -1 : 
         Chase(pred, Prey_list, grid)
-    
+    """
     else:
         
         if pred.days_without_reproduce > 15 : 
@@ -188,7 +207,7 @@ def Next_movement(pred, Prey_list, Pred_list, grid):
                 if distance(pred, mate) <= 2:
                     reproduction(pred, mate, Pred_list, grid)
                 
-    
+    """
 def Chase(pred, prey_list, grid):
    
     nearest_prey = find_nearest_prey(pred, prey_list)
@@ -206,7 +225,7 @@ def Chase(pred, prey_list, grid):
         dy /= magnitude   
     
         # Calculate the new position based on the direction vector and speed
-        new_position = (x1 + round(speed * dx), y1 + round(speed * dy))
+        new_position = (x1 + round(speed * dx + 0.01), y1 + round(speed * dy + 0.01))
         
         # Check if the new position is within the grid
         if is_in_grid(new_position) and not position_taken(new_position,grid):
@@ -225,7 +244,6 @@ def Eat(pred, prey_list):
 def pass_day(pred):
 
     pred.days_without_eating += 1
-    pred.days_without_reproduce += 1
         
             
     
@@ -234,7 +252,17 @@ def check_deaths(wolf_instance):
     if wolf_instance.days_without_eating == limit_eating :
         Wolves_list.remove(wolf_instance)
             
-
+def add_random_pred(SPAWN_1, Wolves_list):
+    
+   SPAWN_1 += pred_spawn_ratio * len(Wolves_list)
+   
+   for i in range(int(SPAWN_1)) :
+        
+        create_new_wolf(Wolves_list)
+        
+        SPAWN_1 = 0
+    
+   return SPAWN_1
 
 ######## PREYS Routine #######################################################
 
@@ -252,18 +280,17 @@ def preys_movement():
             if 0 <= random_move[0] < grid_size - 1 and 0 <= random_move[1] < grid_size - 1 and not position_taken(random_move,grid):
                 prey_instance.move(random_move)
 
-def add_random_prey(SPAWN):
+def add_random_prey(SPAWN, Prey_list):
     
    SPAWN += prey_spawn_ratio * len(Prey_list)
    
-   if SPAWN > 1 :
+   for i in range(int(SPAWN)) :
         
-        position = (random.randint(0, grid_size - 1), random.randint(0, grid_size - 1))
-        if is_in_grid(position) and not position_taken(position, grid):
-            prey_instance = prey(position)
-            Prey_list.append(prey_instance)
+        create_new_prey(Prey_list)
         
         SPAWN = 0
+    
+   return SPAWN
         
 ############# INITIALISATION ##################################################
 
@@ -304,11 +331,12 @@ grid = update_grid(Wolves_list, Prey_list)
     
     
 def update():
-    global Wolves_list, Prey_list, grid, time, SPAWN  # Add time as a global variable
+    global Wolves_list, Prey_list, grid, time, SPAWN, SPAWN_1 # Add time as a global variable
 
     # CALL MAIN FUNCTIONS
     preys_movement()
-    add_random_prey(SPAWN)
+    SPAWN = add_random_prey(SPAWN, Prey_list)
+    SPAWN_1 = add_random_pred(SPAWN_1, Wolves_list)
     
     for pred in Wolves_list:
         pass_day(pred)
@@ -392,3 +420,5 @@ plt.grid(True)
 plt.show()
 # Quit Pygame
 pygame.quit()
+
+

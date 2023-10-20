@@ -7,7 +7,6 @@ Created on Sat Oct 14 13:10:55 2023
 import pygame
 import numpy as np
 import random
-import math
 import matplotlib.pyplot as plt
 
 # Create empty lists to store population data
@@ -20,11 +19,18 @@ prey_population = []
 grid_size = 130
 initial_prey_number = 20
 initial_wolves_number = 3
-prey_spawn_ratio = 0.1
-limit_eating = 32 # Time after which a wolf dies with no eating
 time = 0 
-speed = 2  # velocity of the wolves
 SPAWN = 0
+speed = 2
+
+
+# Parameters to optimize
+prey_spawn_ratio = 0.1
+death_from_hunger_time = 32  
+hunger_threshold = 12
+rep_threshold = 15
+
+
 
 ############# CLASSES #########################################################
 class wolf:
@@ -113,7 +119,7 @@ def is_in_grid(position):
 def reproduction(wolf_instance, mate, Wolves_list, grid):
 
     x1, y1 = wolf_instance.position
-    if mate.days_without_reproduce > 15 :
+    if mate.days_without_reproduce > rep_threshold :
         
         possible_positions = [(x1 + 1, y1), (x1 - 1, y1), (x1, y1 + 1), (x1, y1 - 1),
                               (x1 + 1, y1+1), (x1 + 1, y1-1), (x1-1, y1 + 1), (x1 - 1, y1 - 1)]
@@ -173,12 +179,12 @@ def go_to_mate(pred, mate, grid):
 
 def Next_movement(pred, Prey_list, Pred_list, grid):
     
-    if pred.days_without_eating > 12 : 
+    if pred.days_without_eating > hunger_threshold : 
         Chase(pred, Prey_list, grid)
     
     else:
         
-        if pred.days_without_reproduce > 15 : 
+        if pred.days_without_reproduce > rep_threshold : 
             mate = find_nearest_sex_mate(pred, Pred_list)
             
             if mate: 
@@ -231,7 +237,7 @@ def pass_day(pred):
     
 def check_deaths(wolf_instance):
     
-    if wolf_instance.days_without_eating == limit_eating :
+    if wolf_instance.days_without_eating == death_from_hunger_time :
         Wolves_list.remove(wolf_instance)
             
 
@@ -389,6 +395,10 @@ plt.ylabel('Population')
 plt.legend()
 plt.title('Population Changes Over Time')
 plt.grid(True)
+
+
 plt.show()
+
+
 # Quit Pygame
 pygame.quit()
