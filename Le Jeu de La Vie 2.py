@@ -8,42 +8,44 @@ import pygame
 import numpy as np
 import random
 import math
+import matplotlib.pyplot as plt
 
+# Create empty lists to store population data
+wolf_population = []
+prey_population = []
 
 
 
 # Paramètres
-grid_size = 80
-initial_prey_number = 50
-initial_wolves_number = 6
-spawn_period = 60
-limit_eating = 20 # Time after which a wolf dies with no eating
-reproduction_threshold = 9 # parameter of the reproduction factor
-age_death = 140
+grid_size = 250
+initial_prey_number = 20
+initial_wolves_number = 3
+prey_spawn_ratio = 0.1
+limit_eating = 60 # Time after which a wolf dies with no eating
 time = 0 
 speed = 2  # velocity of the wolves
+SPAWN = 0
 
 ############# CLASSES #########################################################
 class wolf:
-    def __init__(self, position,  age = 0, days_without_eating=0, days_without_reproduction = 0):
-        self.age = age
+    def __init__(self, position, need_to_eat=0, need_to_reproduce = 0, days_without_eating = 0, days_without_reproduce = 0):
         self.position = position
+        self.need_to_eat = need_to_eat
+        self.need_to_reproduce = need_to_reproduce
         self.days_without_eating = days_without_eating
-        self.days_without_reproduction = days_without_reproduction
+        self.days_without_reproduce = days_without_reproduce
 
     def move(self, new_position):
         self.position = new_position
 
-    def pass_day(self):
-        self.age += 1
-        self.days_without_eating += 1
-        self.days_without_reproduction +=1
         
     def eat(self):
+        self.need_to_eat = 0
         self.days_without_eating = 0
         
     def reproduction(self):
-        self.days_without_reproduction = 0
+        self.need_to_reproduce = 0
+        self.days_without_reproduce = 0
 
 class prey:
     def __init__(self, position):
@@ -76,7 +78,8 @@ def distance(a,b):
 
 def position_taken(position, grid):
     x, y = position
-    if x > grid_size - 1 or y > grid_size - 1:
+    
+    if not is_in_grid(position):
         
         return True
     
@@ -84,14 +87,11 @@ def position_taken(position, grid):
     
         return grid[x][y] != 0
 
-def sigmoid_function(j):
-    k = reproduction_threshold  # The number of days before being able to reproduce
+def sigmoid_function(j, k):
+
     return 1 / (1 + np.exp(- (j - k)))
 
     
-def rep_threshold(a,b):
-    
-    return sigmoid_function(a.days_without_reproduction)*sigmoid_function(b.days_without_reproduction)
     
 def find_prey(x, y, Prey_list):
     
@@ -101,29 +101,36 @@ def find_prey(x, y, Prey_list):
             
             return p
 
+def is_in_grid(position):
+    x,y = position
+    if 0 <= x < grid_size - 1 and 0 <= y < grid_size - 1:
+        
+        return True
+    
+    else:
+        return False
+
+
+    
 ########### WOlVES ROUTINE ####################################################
 
-def reproduction(wolf_instance, Wolves_list, grid):
-    new_wolves = []
+def reproduction(wolf_instance, mate, Wolves_list, grid):
 
-    for other_wolf in Wolves_list:
-        if wolf_instance != other_wolf and distance(wolf_instance, other_wolf) <= 3 and rep_threshold(wolf_instance, other_wolf) > 0.5:
-            x1, y1 = wolf_instance.position
-            x2, y2 = other_wolf.position
-            possible_positions = [(x1 + 1, y1), (x1 - 1, y1), (x1, y1 + 1), (x1, y1 - 1),
-                                  (x2 + 1, y2), (x2 - 1, y2), (x2, y2 + 1), (x2, y2 - 1)]
+    x1, y1 = wolf_instance.position
+    if mate.need_to_reproduce > 0.5 :
+        
+        possible_positions = [(x1 + 1, y1), (x1 - 1, y1), (x1, y1 + 1), (x1, y1 - 1),
+                              (x1 + 1, y1+1), (x1 + 1, y1-1), (x1-1, y1 + 1), (x1 - 1, y1 - 1)]
+    
+        for new_pos in possible_positions:
+            if not position_taken(new_pos, grid):
+                new_wolf = wolf(new_pos)
+                wolf_instance.reproduction()
+                mate.reproduction()
+                Wolves_list.append(new_wolf)
+                break
 
-            for new_pos in possible_positions:
-                if not position_taken(new_pos, grid):
-                    new_wolf = wolf(new_pos)
-                    new_wolves.append(new_wolf)
-                    break
-
-            # Reset the reproduction rate to 0
-            wolf_instance.reproduction()
-            other_wolf.reproduction()
-
-    Wolves_list += new_wolves
+    
 
 def find_nearest_prey(wolf_instance, prey_list):
     nearest_prey = None
@@ -135,6 +142,57 @@ def find_nearest_prey(wolf_instance, prey_list):
             nearest_prey = prey_instance
     return nearest_prey
 
+def find_nearest_sex_mate(pred, Pred_list):
+    nearest_mate = None
+    min_distance = float('inf')
+    for mate in Pred_list:
+        dist = distance(pred, mate)
+        
+        if dist < min_distance and dist >=1:
+            min_distance = dist
+            nearest_mate = mate
+    return nearest_mate
+
+def go_to_mate(pred, mate, grid):
+    
+    x1, y1 = pred.position
+    x2, y2 = mate.position
+
+    # Calculate the direction vector from the predator to the prey
+    dx = x2 - x1
+    dy = y2 - y1
+
+    # Normalize the direction vector to have a magnitude of 1
+    magnitude = np.maximum(1, abs(dx) + abs(dy))
+    dx /= magnitude
+    dy /= magnitude   
+
+    # Calculate the new position based on the direction vector and speed
+    new_position = (x1 + round(dx + 0.01), y1 + round(dy+0.01))
+    
+    # Check if the new position is within the grid
+    if is_in_grid(new_position) and not position_taken(new_position,grid):
+        pred.move(new_position)    
+    
+
+def Next_movement(pred, Prey_list, Pred_list, grid):
+    
+    if pred.need_to_eat > 0.75 : 
+        Chase(pred, Prey_list, grid)
+    
+    else:
+        
+        if pred.need_to_reproduce > 0.60 : 
+            mate = find_nearest_sex_mate(pred, Pred_list)
+            
+            if mate: 
+                
+                go_to_mate(pred, mate, grid)
+                
+                if distance(pred, mate) <= 2:
+                    reproduction(pred, mate, Pred_list, grid)
+                
+    
 def Chase(pred, prey_list, grid):
    
     nearest_prey = find_nearest_prey(pred, prey_list)
@@ -155,7 +213,7 @@ def Chase(pred, prey_list, grid):
         new_position = (x1 + math.ceil(speed * dx), y1 + math.ceil(speed * dy))
         
         # Check if the new position is within the grid
-        if 0 <= new_position[0] < grid_size and 0 <= new_position[1] < grid_size and not position_taken(new_position,grid):
+        if is_in_grid(new_position) and not position_taken(new_position,grid):
             pred.move(new_position)
 
 
@@ -163,16 +221,23 @@ def Eat(pred, prey_list):
     
     for j, prey_instance in enumerate(prey_list):
         if distance(pred, prey_instance) < 2:
-            # Mark the prey and wolf for removal
+            # Mark the prey for removal
             del prey_list[j]
             pred.eat()
             continue
+        
+def pass_day(pred):
+
+    pred.need_to_eat = sigmoid_function(pred.days_without_eating, 25)
+    pred.need_to_reproduce = sigmoid_function(pred.days_without_reproduce, 30)
+    pred.days_without_eating += 1
+    pred.days_without_reproduce += 1
         
             
     
 def check_deaths(wolf_instance):
     
-    if wolf_instance.days_without_eating == limit_eating or wolf_instance.age > age_death:
+    if wolf_instance.days_without_eating == limit_eating :
         Wolves_list.remove(wolf_instance)
             
 
@@ -193,13 +258,18 @@ def preys_movement():
             if 0 <= random_move[0] < grid_size - 1 and 0 <= random_move[1] < grid_size - 1 and not position_taken(random_move,grid):
                 prey_instance.move(random_move)
 
-def add_random_prey():
+def add_random_prey(SPAWN):
     
-    if time % spawn_period == 0:
+   SPAWN += prey_spawn_ratio * len(Prey_list)
+   
+   if SPAWN > 1 :
         
         position = (random.randint(0, grid_size - 1), random.randint(0, grid_size - 1))
-        prey_instance = prey(position)
-        Prey_list.append(prey_instance)
+        if is_in_grid(position) and not position_taken(position, grid):
+            prey_instance = prey(position)
+            Prey_list.append(prey_instance)
+        
+        SPAWN = 0
         
 ############# INITIALISATION ##################################################
 
@@ -240,21 +310,18 @@ grid = update_grid(Wolves_list, Prey_list)
     
     
 def update():
-    global Wolves_list, Prey_list, grid, time  # Add time as a global variable
+    global Wolves_list, Prey_list, grid, time, SPAWN  # Add time as a global variable
 
     # CALL MAIN FUNCTIONS
     preys_movement()
-    add_random_prey()
+    add_random_prey(SPAWN)
     
     for pred in Wolves_list:
-        pred.pass_day()
+        pass_day(pred)
         check_deaths(pred)
+        Next_movement(pred, Prey_list, Wolves_list, grid)
         Eat(pred, Prey_list)
-        reproduction(pred, Wolves_list, grid)
-        Chase(pred, Prey_list, grid)
-    
-    
-    
+        
 
     grid = update_grid(Wolves_list, Prey_list)
 
@@ -265,8 +332,8 @@ def update():
 pygame.init()
 
 # Define screen parameters
-grid_size = 80
-cell_size = 10
+grid_size = 250
+cell_size = 4
 screen_width = grid_size * cell_size
 screen_height = grid_size * cell_size
 
@@ -305,16 +372,29 @@ while running:
     update()
 
     # Clear the screen
-    screen.fill((255, 255, 255))
-
+    screen.fill((0, 0, 0))
+    
     # Draw the grid
     draw_grid(grid, screen)
-
+    
+    # Append population counts to the lists
+    wolf_population.append(len(Wolves_list))
+    prey_population.append(len(Prey_list))
+   
     # Update the display
     pygame.display.flip()
 
     # Control frame rate (adjust the value as needed)
     clock.tick(10)  # Example: 10 frames per second
-
+    
+plt.figure(figsize=(10, 6))
+plt.plot(range(len(wolf_population)), wolf_population, label='Wolves')
+plt.plot(range(len(prey_population)), prey_population, label='Prey')
+plt.xlabel('Time')
+plt.ylabel('Population')
+plt.legend()
+plt.title('Population Changes Over Time')
+plt.grid(True)
+plt.show()
 # Quit Pygame
 pygame.quit()
